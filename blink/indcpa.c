@@ -214,18 +214,23 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   polyvec a[KYBER_K], e, pkpv, skpv;
 
   memcpy(buf, coins, KYBER_SYMBYTES);
-  buf[KYBER_SYMBYTES] = KYBER_K;
+  buf[KYBER_SYMBYTES] = KYBER_K;     
+  //start core 0
   hash_g(buf, buf, KYBER_SYMBYTES+1);
 
   gen_a(a, publicseed);
-
+  // end core 0
+  
+  // start core 1
   for(i=0;i<KYBER_K;i++)					// Parallalization indcpa_2
     poly_getnoise_eta1(&skpv.vec[i], noiseseed, nonce++);
-  for(i=0;i<KYBER_K;i++)					//
+    for(i=0;i<KYBER_K;i++)					//
     poly_getnoise_eta1(&e.vec[i], noiseseed, nonce++);
 
   polyvec_ntt(&skpv);
   polyvec_ntt(&e);
+  // end core 1
+
 
   // matrix-vector multiplication
   for(i=0;i<KYBER_K;i++) {
