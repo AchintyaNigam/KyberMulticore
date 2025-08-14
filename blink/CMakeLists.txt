@@ -47,6 +47,8 @@ target_link_libraries(blink
     pico_stdio_usb
     pico_rand
     pico_cyw43_arch_none
+    pico_multicore
+    pico_time
 
 )
 

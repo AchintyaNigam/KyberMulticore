@@ -40,6 +40,11 @@
     "files.associations": {
         "string.h": "c",
         "inttypes.h": "c",
-        "kem.h": "c"
+        "kem.h": "c",
+        "stdio_usb.h": "c",
+        "stdlib.h": "c",
+        "randombytes.h": "c",
+        "params.h": "c",
+        "time.h": "c"
     }
 }

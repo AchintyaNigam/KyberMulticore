@@ -7,18 +7,19 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "pico/cyw43_arch.h"  
+#include "pico/time.h"
 
-#define NTESTS 10
+#define NTESTS 100
 
 
 
 static int test_keys(void)
 {
-  uint8_t pk[CRYPTO_PUBLICKEYBYTES];
-  uint8_t sk[CRYPTO_SECRETKEYBYTES];
-  uint8_t ct[CRYPTO_CIPHERTEXTBYTES];
-  uint8_t key_a[CRYPTO_BYTES];
-  uint8_t key_b[CRYPTO_BYTES];
+static uint8_t pk[CRYPTO_PUBLICKEYBYTES];
+static uint8_t sk[CRYPTO_SECRETKEYBYTES];
+static uint8_t ct[CRYPTO_CIPHERTEXTBYTES];
+static uint8_t key_a[CRYPTO_BYTES];
+static uint8_t key_b[CRYPTO_BYTES];
 
   //Alice generates a public key
   crypto_kem_keypair(pk, sk);
@@ -39,11 +40,11 @@ static int test_keys(void)
 
 static int test_invalid_sk_a(void)
 {
-  uint8_t pk[CRYPTO_PUBLICKEYBYTES];
-  uint8_t sk[CRYPTO_SECRETKEYBYTES];
-  uint8_t ct[CRYPTO_CIPHERTEXTBYTES];
-  uint8_t key_a[CRYPTO_BYTES];
-  uint8_t key_b[CRYPTO_BYTES];
+static uint8_t pk[CRYPTO_PUBLICKEYBYTES];
+static uint8_t sk[CRYPTO_SECRETKEYBYTES];
+static uint8_t ct[CRYPTO_CIPHERTEXTBYTES];
+static uint8_t key_a[CRYPTO_BYTES];
+static uint8_t key_b[CRYPTO_BYTES];
 
   //Alice generates a public key
   crypto_kem_keypair(pk, sk);
@@ -67,13 +68,13 @@ static int test_invalid_sk_a(void)
 
 static int test_invalid_ciphertext(void)
 {
-  uint8_t pk[CRYPTO_PUBLICKEYBYTES];
-  uint8_t sk[CRYPTO_SECRETKEYBYTES];
-  uint8_t ct[CRYPTO_CIPHERTEXTBYTES];
-  uint8_t key_a[CRYPTO_BYTES];
-  uint8_t key_b[CRYPTO_BYTES];
-  uint8_t b;
-  size_t pos;
+static uint8_t pk[CRYPTO_PUBLICKEYBYTES];
+static uint8_t sk[CRYPTO_SECRETKEYBYTES];
+static uint8_t ct[CRYPTO_CIPHERTEXTBYTES];
+static uint8_t key_a[CRYPTO_BYTES];
+static uint8_t key_b[CRYPTO_BYTES];
+  static uint8_t b;
+  static size_t pos;
 
   do {
     randombytes(&b, sizeof(uint8_t));
@@ -125,19 +126,22 @@ int pico_led_init(void) {
 
 int main(void)
 {
-   stdio_init_all();
-     int rc = pico_led_init();
-    hard_assert(rc == PICO_OK);
+  
+  stdio_init_all();
+  int rc = pico_led_init();
+  hard_assert(rc == PICO_OK);
   unsigned int i;
   int r;
+  stdio_usb_init();
   sleep_ms(5000);
-  printf("ASDASFdsfsdpokjsdfsdf");
-
-    stdio_usb_init();
+  uint64_t us = time_us_64();                    // monotonic µs since boot[15]
+  uint32_t ms = to_ms_since_boot(get_absolute_time()); // ms since boot[7]
+  printf(" initial =%" PRIu64 "us (%ums)\n", us, ms);
 
 
     // Turn LED on before running tests
     pico_set_led(true);
+  
   for(i=0;i<NTESTS;i++) {
     r  = test_keys();
     r |= test_invalid_sk_a();
@@ -145,13 +149,13 @@ int main(void)
     if(r)
       return 1;
   }
-  sleep_ms(2000); // Print every second
-
-        pico_set_led(false);
-        sleep_ms(2000); // Print every second
+   us = time_us_64();                    // monotonic µs since boot[15]
+   ms = to_ms_since_boot(get_absolute_time()); // ms since boot[7]
+  printf("final =%" PRIu64 "us (%ums)\n", us, ms);
+  pico_set_led(false);
   printf("CRYPTO_SECRETKEYBYTES:  %d\n",CRYPTO_SECRETKEYBYTES);
   printf("CRYPTO_PUBLICKEYBYTES:  %d\n",CRYPTO_PUBLICKEYBYTES);
   printf("CRYPTO_CIPHERTEXTBYTES: %d\n",CRYPTO_CIPHERTEXTBYTES);
-
+  
   return 0;
 }
