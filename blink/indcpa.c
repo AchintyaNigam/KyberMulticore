@@ -20,6 +20,15 @@ typedef struct
   polyvec *a;
 } core1_data_t;
 
+typedef struct {
+    polyvec *a;
+    polyvec *pkpv;
+    polyvec *skpv;
+    unsigned int start;
+    unsigned int end;
+} core1_mul_data_t;
+
+
 /*************************************************
  * Name:        pack_pk
  *
@@ -232,6 +241,23 @@ void core1_worker()
   multicore_fifo_push_blocking(1);
 }
 
+void core1_mul_worker()
+{
+    core1_mul_data_t *data = (core1_mul_data_t *)multicore_fifo_pop_blocking();
+
+    unsigned int start = data->start;
+    unsigned int end   = data->end;
+
+    for (unsigned int i = start; i < end; i++) {
+        polyvec_basemul_acc_montgomery(&data->pkpv->vec[i], &data->a[i], data->skpv);
+        poly_tomont(&data->pkpv->vec[i]);
+    }
+
+    // Signal completion to core0
+    multicore_fifo_push_blocking(1);
+}
+
+
 void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
                            uint8_t sk[KYBER_INDCPA_SECRETKEYBYTES],
                            const uint8_t coins[KYBER_SYMBYTES])
@@ -268,24 +294,44 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
 
   // Wait for core 1 to finish hash & gen_a
   multicore_fifo_pop_blocking();
+  multicore_reset_core1();
 
-  // Continue with matrix-vector multiplication
-  for (i = 0; i < KYBER_K; i++)
-  {
+  // Split i-loop range across cores
+unsigned int half = KYBER_K / 2;      // floor division
+unsigned int core1_start = half;
+unsigned int core1_end   = KYBER_K;
+unsigned int core0_start = 0;
+unsigned int core0_end   = half;
+
+// Prepare work packet for core1
+static volatile core1_mul_data_t mul_data;
+mul_data.a    = a;
+mul_data.pkpv = &pkpv;
+mul_data.skpv = &skpv;
+mul_data.start = core1_start;
+mul_data.end   = core1_end;
+
+// Launch worker on core1
+multicore_launch_core1(core1_mul_worker);
+multicore_fifo_push_blocking((uintptr_t)&mul_data);
+
+// Core 0 does its part in parallel
+for (i = core0_start; i < core0_end; i++) {
     polyvec_basemul_acc_montgomery(&pkpv.vec[i], &a[i], &skpv);
     poly_tomont(&pkpv.vec[i]);
-  }
+}
+
+// Wait for core1 to finish before proceeding
+multicore_fifo_pop_blocking();
+multicore_reset_core1();
 
   polyvec_add(&pkpv, &pkpv, &e);
   polyvec_reduce(&pkpv);
-
+  
   pack_sk(sk, &skpv);
   pack_pk(pk, &pkpv, publicseed);
 
-  multicore_reset_core1();
 }
-
-// Also update the core1 entry function for consistency:
 
 /*************************************************
  * Name:        indcpa_enc
