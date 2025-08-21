@@ -167,6 +167,7 @@ void polyvec_frombytes(polyvec *r, const uint8_t a[KYBER_POLYVECBYTES])
 *
 * Arguments:   - polyvec *r: pointer to in/output vector of polynomials
 **************************************************/
+
 void polyvec_ntt(polyvec *r)
 {
   unsigned int i;
