@@ -26,12 +26,9 @@ static uint8_t key_b[CRYPTO_BYTES];
 
   //Bob derives a secret key and creates a response
   crypto_kem_enc(ct, key_b, pk);
-
   //Alice uses Bobs response to get her shared key
   crypto_kem_dec(key_a, ct, sk);
-
   if(memcmp(key_a, key_b, CRYPTO_BYTES)) {
-    printf("ERROR keys\n");
     return 1;
   }
 

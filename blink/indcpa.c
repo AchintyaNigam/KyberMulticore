@@ -289,12 +289,12 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   for (i = 0; i < KYBER_K; i++)
     poly_getnoise_eta1(&e.vec[i], noiseseed, nonce++);
 
-  polyvec_ntt(&skpv);
-  polyvec_ntt(&e);
-
-  // Wait for core 1 to finish hash & gen_a
-  multicore_fifo_pop_blocking();
-  multicore_reset_core1();
+    
+    polyvec_ntt(&skpv);
+    polyvec_ntt(&e);
+    // Wait for core 1 to finish hash & gen_a
+    multicore_fifo_pop_blocking();
+    multicore_reset_core1();
 
   // Split i-loop range across cores
 unsigned int half = KYBER_K / 2;      // floor division
@@ -325,8 +325,8 @@ for (i = core0_start; i < core0_end; i++) {
 multicore_fifo_pop_blocking();
 multicore_reset_core1();
 
-  polyvec_add(&pkpv, &pkpv, &e);
-  polyvec_reduce(&pkpv);
+polyvec_add(&pkpv, &pkpv, &e);
+polyvec_reduce(&pkpv);
   
   pack_sk(sk, &skpv);
   pack_pk(pk, &pkpv, publicseed);
@@ -349,6 +349,32 @@ multicore_reset_core1();
  *                                      (of length KYBER_SYMBYTES) to deterministically
  *                                      generate all randomness
  **************************************************/
+
+  typedef struct {
+      polyvec *at;   // input array
+      polyvec *b;    // output array
+      polyvec *sp;   // secret vector
+      unsigned int start;
+      unsigned int end;
+  } core1_mul_data2_t;
+
+  void core1_mul_worker2()
+  {
+      core1_mul_data2_t *data = (core1_mul_data2_t *)multicore_fifo_pop_blocking();
+      unsigned int start = data->start;
+      unsigned int end   = data->end;
+
+      for (unsigned int i = start; i < end; i++) {
+          polyvec_basemul_acc_montgomery(&data->b->vec[i], &data->at[i], data->sp);
+      }
+
+      // Signal completion
+      multicore_fifo_push_blocking(1);
+  }
+
+
+
+
 void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
                 const uint8_t m[KYBER_INDCPA_MSGBYTES],
                 const uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
@@ -357,8 +383,8 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   unsigned int i;
   uint8_t seed[KYBER_SYMBYTES];
   uint8_t nonce = 0;
-  polyvec sp, pkpv, ep, at[KYBER_K], b;
-  poly v, k, epp;
+  static polyvec sp, pkpv, ep, at[KYBER_K], b;
+  static poly v, k, epp;
 
   unpack_pk(&pkpv, seed, pk);
   poly_frommsg(&k, m);
@@ -369,14 +395,38 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   for (i = 0; i < KYBER_K; i++) // Parallalization indcpa_3
     poly_getnoise_eta2(ep.vec + i, coins, nonce++);
   poly_getnoise_eta2(&epp, coins, nonce++); // Parallalization indcpa_4
-
   polyvec_ntt(&sp); // Parallalization indcpa_4
+  // Compute ranges for splitting
+  unsigned int half = KYBER_K / 2;
+  unsigned int core1_start = half;
+  unsigned int core1_end   = KYBER_K;
+  unsigned int core0_start = 0;
+  unsigned int core0_end   = half;
 
-  // matrix-vector multiplication
-  for (i = 0; i < KYBER_K; i++) // Parallalization indcpa_5
-    polyvec_basemul_acc_montgomery(&b.vec[i], &at[i], &sp);
+// Setup data packet for core1
+  static volatile core1_mul_data2_t mul_data2;
+  mul_data2.at = at;
+  mul_data2.b  = &b;
+  mul_data2.sp = &sp;
+  mul_data2.start = core1_start;
+  mul_data2.end   = core1_end;
+
+  // Launch multiplication worker on core1
+  multicore_launch_core1(core1_mul_worker2);
+  multicore_fifo_push_blocking((uintptr_t)&mul_data2);
+
+  // Core0 executes its portion
+  for (i = core0_start; i < core0_end; i++) {
+      polyvec_basemul_acc_montgomery(&b.vec[i], &at[i], &sp);
+  }
 
   polyvec_basemul_acc_montgomery(&v, &pkpv, &sp); // Parallalization indcpa_5
+
+  // Wait for core1 and cleanup
+  multicore_fifo_pop_blocking();
+  multicore_reset_core1();
+
+
 
   polyvec_invntt_tomont(&b); // Parallalization indcpa_6
   poly_invntt_tomont(&v);    // Parallalization indcpa_6
@@ -407,18 +457,15 @@ void indcpa_dec(uint8_t m[KYBER_INDCPA_MSGBYTES],
                 const uint8_t c[KYBER_INDCPA_BYTES],
                 const uint8_t sk[KYBER_INDCPA_SECRETKEYBYTES])
 {
-  polyvec b, skpv;
-  poly v, mp;
+  static polyvec b, skpv;
+  static poly v, mp;
 
   unpack_ciphertext(&b, &v, c); // Parallalization indcpa_9
   unpack_sk(&skpv, sk);         // Parallalization indcpa_9
-
   polyvec_ntt(&b);
   polyvec_basemul_acc_montgomery(&mp, &skpv, &b);
   poly_invntt_tomont(&mp);
-
   poly_sub(&mp, &v, &mp);
   poly_reduce(&mp);
-
   poly_tomsg(m, &mp);
 }
