@@ -257,6 +257,24 @@ void core1_mul_worker()
     multicore_fifo_push_blocking(1);
 }
 
+typedef struct {
+    uint8_t *pk;
+    polyvec *pkpv;
+    const uint8_t *publicseed;
+} core1_pack_data_t;
+
+void core1_pack_worker()
+{
+    core1_pack_data_t *data = (core1_pack_data_t *)multicore_fifo_pop_blocking();
+
+    // Core1 does pack_pk
+    pack_pk(data->pk, data->pkpv, data->publicseed);
+
+    // Signal completion to core0
+    multicore_fifo_push_blocking(1);
+}
+
+
 
 void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
                            uint8_t sk[KYBER_INDCPA_SECRETKEYBYTES],
@@ -328,8 +346,22 @@ multicore_reset_core1();
 polyvec_add(&pkpv, &pkpv, &e);
 polyvec_reduce(&pkpv);
   
+  // Launch core1 worker
+  static volatile core1_pack_data_t pack_data;
+  pack_data.pk         = pk;
+  pack_data.pkpv       = &pkpv;
+  pack_data.publicseed = publicseed;
+
+  multicore_launch_core1(core1_pack_worker);
+  multicore_fifo_push_blocking((uintptr_t)&pack_data);
+
+  // Core0 packs secret key in parallel
   pack_sk(sk, &skpv);
-  pack_pk(pk, &pkpv, publicseed);
+
+  // Wait for core1
+  multicore_fifo_pop_blocking();
+  multicore_reset_core1();
+
 
 }
 
@@ -372,6 +404,17 @@ polyvec_reduce(&pkpv);
       multicore_fifo_push_blocking(1);
   }
 
+typedef struct {
+    poly *k;
+    const uint8_t *m;
+} core1_frommsg_data_t;
+
+void core1_frommsg_worker()
+{
+    core1_frommsg_data_t *data = (core1_frommsg_data_t *) multicore_fifo_pop_blocking();
+    poly_frommsg(data->k, data->m);
+    multicore_fifo_push_blocking(1); // signal completion
+}
 
 
 
@@ -386,8 +429,21 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   static polyvec sp, pkpv, ep, at[KYBER_K], b;
   static poly v, k, epp;
 
+  // Launch core1 for poly_frommsg
+  static volatile core1_frommsg_data_t frommsg_data;
+  frommsg_data.k = &k;
+  frommsg_data.m = m;
+
+  multicore_launch_core1(core1_frommsg_worker);
+  multicore_fifo_push_blocking((uintptr_t)&frommsg_data);
+
+  // Meanwhile, Core0 does unpack_pk
   unpack_pk(&pkpv, seed, pk);
-  poly_frommsg(&k, m);
+
+  // Wait for core1
+  multicore_fifo_pop_blocking();
+  multicore_reset_core1();
+
   gen_at(at, seed);
 
   for (i = 0; i < KYBER_K; i++) // Parallalization indcpa_3
@@ -453,6 +509,10 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
  *              - const uint8_t *sk: pointer to input secret key
  *                                   (of length KYBER_INDCPA_SECRETKEYBYTES)
  **************************************************/
+
+ 
+
+
 void indcpa_dec(uint8_t m[KYBER_INDCPA_MSGBYTES],
                 const uint8_t c[KYBER_INDCPA_BYTES],
                 const uint8_t sk[KYBER_INDCPA_SECRETKEYBYTES])
@@ -462,6 +522,8 @@ void indcpa_dec(uint8_t m[KYBER_INDCPA_MSGBYTES],
 
   unpack_ciphertext(&b, &v, c); // Parallalization indcpa_9
   unpack_sk(&skpv, sk);         // Parallalization indcpa_9
+
+  
   polyvec_ntt(&b);
   polyvec_basemul_acc_montgomery(&mp, &skpv, &b);
   poly_invntt_tomont(&mp);
