@@ -1,2 +1,0 @@
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool-build/enc_bootloader/CMakeFiles/edit_cache.dir
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool-build/enc_bootloader/CMakeFiles/rebuild_cache.dir

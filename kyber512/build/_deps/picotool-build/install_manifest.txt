@@ -1,6 +1,0 @@
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool/picotool
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool/picotoolTargets.cmake
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool/picotoolTargets-release.cmake
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool/picotoolConfig.cmake
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool/picotoolConfigVersion.cmake
-/home/achintyanigam/dev/KyberMulticore/KyberMulticore/kyber512/build/_deps/picotool/enc_bootloader.elf
