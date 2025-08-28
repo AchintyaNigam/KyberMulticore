@@ -35,11 +35,17 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(Kyber_singlecore test_kyber.c
+add_executable(Kyber_singlecore test_kyber_separate.c
     kem.c indcpa.c polyvec.c poly.c ntt.c cbd.c reduce.c verify.c
     fips202.c symmetric-shake.c
     randombytes.c
     )
+
+target_compile_definitions(Kyber_singlecore PRIVATE
+PICO_CYW43_ARCH_DEBUG_ENABLED=0
+CYW43_ENABLE_DEBUG=0
+CYW43_LOG_ENABLED=0
+)
 
 # pull in common dependencies
 target_link_libraries(Kyber_singlecore 

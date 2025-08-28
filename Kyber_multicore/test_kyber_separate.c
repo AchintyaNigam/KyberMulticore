@@ -73,8 +73,8 @@ static int test_invalid_ciphertext(void) {
   static uint8_t b;
   size_t pos;
 
-  do { randombytes(&b, sizeof(static uint8_t)); } while(!b);
-  randombytes((static uint8_t *)&pos, sizeof(size_t));
+  do { randombytes(&b, sizeof(uint8_t)); } while(!b);
+  randombytes((uint8_t *)&pos, sizeof(size_t));
 
   crypto_kem_keypair(pk, sk);
   crypto_kem_enc(ct, key_b, pk);
