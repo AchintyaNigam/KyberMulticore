@@ -28,7 +28,7 @@ set(PICO_BOARD pico2_w CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(blink C CXX ASM)
+project(Kyber_multicore C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -42,7 +42,7 @@ add_executable(Kyber_multicore test_kyber.c
     )
 
 # pull in common dependencies
-target_link_libraries(blink 
+target_link_libraries(Kyber_multicore 
     pico_stdlib
     pico_stdio_usb
     pico_rand
@@ -53,10 +53,10 @@ target_link_libraries(blink
 )
 
 if (PICO_CYW43_SUPPORTED)
-    target_link_libraries(blink pico_cyw43_arch_none)
+    target_link_libraries(Kyber_multicore pico_cyw43_arch_none)
 endif()
 
 # create map/bin/hex file etc.
-pico_add_extra_outputs(blink)
+pico_add_extra_outputs(Kyber_multicore)
 
 # add url via pico_set_program_url
