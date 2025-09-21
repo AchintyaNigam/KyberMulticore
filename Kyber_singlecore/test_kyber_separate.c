@@ -9,7 +9,7 @@
 #include "pico/cyw43_arch.h"
 #include "pico/time.h"
 
-#define NTESTS 100
+#define NTESTS 1000
 
 static int test_keys_timed(uint64_t *d_keygen, uint64_t *d_enc, uint64_t *d_dec) {
   uint8_t pk[CRYPTO_PUBLICKEYBYTES];

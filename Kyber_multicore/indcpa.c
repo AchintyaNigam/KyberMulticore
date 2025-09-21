@@ -328,12 +328,12 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
 
   polyvec_ntt(&skpv);
   polyvec_ntt(&e);
+
   // Wait for core 1 to finish hash & gen_a
   multicore_fifo_pop_blocking();
   multicore_reset_core1();
 
-  // Parallelisaion across k vector lanes
-  // Split i-loop range across cores
+  // Parallelisation across k vector lanes
   unsigned int half = KYBER_K / 2; // floor division
   unsigned int core1_start = half;
   unsigned int core1_end = KYBER_K;
@@ -352,6 +352,7 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   multicore_launch_core1(core1_mul_worker);
   multicore_fifo_push_blocking((uintptr_t)&mul_data);
 
+  // Core 0 processes the first half
   for (i = core0_start; i < core0_end; i++)
   {
     polyvec_basemul_acc_montgomery(&pkpv.vec[i], &a[i], &skpv);
@@ -362,8 +363,14 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   multicore_fifo_pop_blocking();
   multicore_reset_core1();
 
+  // Securely zeroise 'a' after use
+  memset(a, 0, sizeof(a));
+
   polyvec_add(&pkpv, &pkpv, &e);
   polyvec_reduce(&pkpv);
+
+  // Securely zeroise 'e' after use
+  memset(e.vec, 0, sizeof(e.vec));
 
   // Launch core1 worker for packing
   static volatile core1_pack_data_t pack_data;
@@ -377,10 +384,17 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   // Core0 packs secret key in parallel
   pack_sk(sk, &skpv);
 
+  // Securely zeroise 'pkpv' after use
+  memset(pkpv.vec, 0, sizeof(pkpv.vec));
+
   // Wait for core1
   multicore_fifo_pop_blocking();
   multicore_reset_core1();
+
+  // Finally, zeroise the secret key
+  memset(skpv.vec, 0, sizeof(skpv.vec));
 }
+
 
 /*
   - Below are the functions which are to be sent to core1 for the enc function
@@ -458,7 +472,10 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   for (i = 0; i < KYBER_K; i++)
     poly_getnoise_eta2(ep.vec + i, coins, nonce++);
   poly_getnoise_eta2(&epp, coins, nonce++);
+  
   polyvec_ntt(&sp);
+
+
   // Compute ranges for splitting
   unsigned int half = KYBER_K / 2;
   unsigned int core1_start = half;
@@ -499,8 +516,21 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   polyvec_reduce(&b);
   poly_reduce(&v);
 
+  // Securely zeroise all used buffers before packing
+  memset(at, 0, sizeof(at));  // Zeroise gen_at-related buffer
+  memset(&sp, 0, sizeof(sp));  // Zeroise sp
+  memset(&ep, 0, sizeof(ep)); // Zeroise ep
+  memset(&epp, 0, sizeof(epp));
+  memset(&pkpv, 0, sizeof(pkpv));  // Zeroise pkpv
+  memset(&k, 0, sizeof(k));  // Zeroise k
+  
   pack_ciphertext(c, &b, &v);
+  
+  // Finally, zeroise the remaining sensitive data
+  memset(&b, 0, sizeof(b));  // Zeroise b
+  memset(&v, 0, sizeof(v));  // Zeroise v
 }
+
 
 /*************************************************
  * Name:        indcpa_dec
@@ -532,4 +562,10 @@ void indcpa_dec(uint8_t m[KYBER_INDCPA_MSGBYTES],
   poly_sub(&mp, &v, &mp);
   poly_reduce(&mp);
   poly_tomsg(m, &mp);
+
+  //zeroise sensitive data
+  memset(&skpv, 0, sizeof(skpv));
+  memset(&b, 0, sizeof(b));  
+  memset(&v, 0, sizeof(v));  
+  memset(&mp, 0, sizeof(mp));  
 }
