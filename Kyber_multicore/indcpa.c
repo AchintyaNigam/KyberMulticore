@@ -14,6 +14,14 @@
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 
+// Volatile pointer zeroisation
+void secure_zero(void *v, size_t n)
+{
+  volatile uint8_t *p = (volatile uint8_t *)v;
+  while (n--)
+    *p++ = 0;
+}
+
 typedef struct
 {
   uint8_t *buf;
@@ -364,13 +372,15 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   multicore_reset_core1();
 
   // Securely zeroise 'a' after use
-  memset(a, 0, sizeof(a));
+  // memset(a, 0, sizeof(a));
+  secure_zero(a, sizeof(a));
 
   polyvec_add(&pkpv, &pkpv, &e);
   polyvec_reduce(&pkpv);
 
   // Securely zeroise 'e' after use
-  memset(e.vec, 0, sizeof(e.vec));
+  // memset(e.vec, 0, sizeof(e.vec));
+  secure_zero(e.vec, sizeof(e.vec));
 
   // Launch core1 worker for packing
   static volatile core1_pack_data_t pack_data;
@@ -385,16 +395,17 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   pack_sk(sk, &skpv);
 
   // Securely zeroise 'pkpv' after use
-  memset(pkpv.vec, 0, sizeof(pkpv.vec));
+  // memset(pkpv.vec, 0, sizeof(pkpv.vec));
+  secure_zero(pkpv.vec, sizeof(pkpv.vec));
 
   // Wait for core1
   multicore_fifo_pop_blocking();
   multicore_reset_core1();
 
   // Finally, zeroise the secret key
-  memset(skpv.vec, 0, sizeof(skpv.vec));
+  // memset(skpv.vec, 0, sizeof(skpv.vec));
+  secure_zero(skpv.vec, sizeof(skpv.vec));
 }
-
 
 /*
   - Below are the functions which are to be sent to core1 for the enc function
@@ -472,9 +483,8 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   for (i = 0; i < KYBER_K; i++)
     poly_getnoise_eta2(ep.vec + i, coins, nonce++);
   poly_getnoise_eta2(&epp, coins, nonce++);
-  
-  polyvec_ntt(&sp);
 
+  polyvec_ntt(&sp);
 
   // Compute ranges for splitting
   unsigned int half = KYBER_K / 2;
@@ -517,20 +527,27 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   poly_reduce(&v);
 
   // Securely zeroise all used buffers before packing
-  memset(at, 0, sizeof(at));  // Zeroise gen_at-related buffer
-  memset(&sp, 0, sizeof(sp));  // Zeroise sp
-  memset(&ep, 0, sizeof(ep)); // Zeroise ep
-  memset(&epp, 0, sizeof(epp));
-  memset(&pkpv, 0, sizeof(pkpv));  // Zeroise pkpv
-  memset(&k, 0, sizeof(k));  // Zeroise k
-  
-  pack_ciphertext(c, &b, &v);
-  
-  // Finally, zeroise the remaining sensitive data
-  memset(&b, 0, sizeof(b));  // Zeroise b
-  memset(&v, 0, sizeof(v));  // Zeroise v
-}
+  // memset(at, 0, sizeof(at));  // Zeroise gen_at-related buffer
+  // memset(&sp, 0, sizeof(sp));  // Zeroise sp
+  // memset(&ep, 0, sizeof(ep)); // Zeroise ep
+  // memset(&epp, 0, sizeof(epp));
+  // memset(&pkpv, 0, sizeof(pkpv));  // Zeroise pkpv
+  // memset(&k, 0, sizeof(k));  // Zeroise k
+  secure_zero(at, sizeof(at));
+  secure_zero(&sp, sizeof(sp));
+  secure_zero(&ep, sizeof(ep));
+  secure_zero(&epp, sizeof(epp));
+  secure_zero(&pkpv, sizeof(pkpv));
+  secure_zero(&k, sizeof(k));
 
+  pack_ciphertext(c, &b, &v);
+
+  // Finally, zeroise the remaining sensitive data
+  // memset(&b, 0, sizeof(b)); // Zeroise b
+  // memset(&v, 0, sizeof(v)); // Zeroise v
+  secure_zero(&b, sizeof(b));
+  secure_zero(&v, sizeof(v));
+}
 
 /*************************************************
  * Name:        indcpa_dec
@@ -563,9 +580,13 @@ void indcpa_dec(uint8_t m[KYBER_INDCPA_MSGBYTES],
   poly_reduce(&mp);
   poly_tomsg(m, &mp);
 
-  //zeroise sensitive data
-  memset(&skpv, 0, sizeof(skpv));
-  memset(&b, 0, sizeof(b));  
-  memset(&v, 0, sizeof(v));  
-  memset(&mp, 0, sizeof(mp));  
+  // zeroise sensitive data
+  // memset(&skpv, 0, sizeof(skpv));
+  // memset(&b, 0, sizeof(b));
+  // memset(&v, 0, sizeof(v));
+  // memset(&mp, 0, sizeof(mp));
+  secure_zero(&skpv, sizeof(skpv));
+  secure_zero(&b, sizeof(b));
+  secure_zero(&v, sizeof(v));
+  secure_zero(&mp, sizeof(mp));
 }

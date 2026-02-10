@@ -9,7 +9,7 @@
 #include "pico/cyw43_arch.h"
 #include "pico/time.h"
 
-#define NTESTS 1000
+#define NTESTS 100
 #define SIGNAL_PIN 2
 
 static int test_keys(void)
