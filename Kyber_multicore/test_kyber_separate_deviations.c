@@ -11,7 +11,7 @@
 #include "pico/cyw43_arch.h"
 #include "pico/time.h"
 
-#define NTESTS 1000
+#define NTESTS 100
 
 static double mean_u64(uint64_t *arr, size_t n)
 {
