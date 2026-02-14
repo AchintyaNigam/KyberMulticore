@@ -252,45 +252,59 @@ void gen_matrix(polyvec *a, const uint8_t seed[KYBER_SYMBYTES], int transposed)
 
 void core1_hash_worker()
 {
-  // Wait for data from core 0
-  core1_hash_data_t *data = (core1_hash_data_t *)multicore_fifo_pop_blocking();
+  core1_hash_data_t *data =
+      (core1_hash_data_t *)multicore_fifo_pop_blocking();
 
-  // Core 1 does hashing and gen_a
+  uint64_t t0 = time_us_64();
+
   const uint8_t *publicseed = data->buf;
   hash_g(data->buf, data->buf, KYBER_SYMBYTES + 1);
   gen_a(data->a, publicseed);
 
-  // Signal completion to core 0
+  uint64_t t1 = time_us_64();
+  kg_prof.core1_hash_gena += (t1 - t0);
+
   multicore_fifo_push_blocking(1);
 }
+
 
 void core1_mul_worker()
 {
-  core1_mul_data_t *data = (core1_mul_data_t *)multicore_fifo_pop_blocking();
+  core1_mul_data_t *data =
+      (core1_mul_data_t *)multicore_fifo_pop_blocking();
 
-  unsigned int start = data->start;
-  unsigned int end = data->end;
+  uint64_t t0 = time_us_64();
 
-  for (unsigned int i = start; i < end; i++)
+  for (unsigned int i = data->start; i < data->end; i++)
   {
-    polyvec_basemul_acc_montgomery(&data->pkpv->vec[i], &data->a[i], data->skpv);
+    polyvec_basemul_acc_montgomery(&data->pkpv->vec[i],
+                                   &data->a[i],
+                                   data->skpv);
     poly_tomont(&data->pkpv->vec[i]);
   }
 
-  // Signal completion to core0
+  uint64_t t1 = time_us_64();
+  kg_prof.core1_matmul += (t1 - t0);
+
   multicore_fifo_push_blocking(1);
 }
+
 
 void core1_pack_worker()
 {
-  core1_pack_data_t *data = (core1_pack_data_t *)multicore_fifo_pop_blocking();
+  core1_pack_data_t *data =
+      (core1_pack_data_t *)multicore_fifo_pop_blocking();
 
-  // Core1 does pack_pk
+  uint64_t t0 = time_us_64();
+
   pack_pk(data->pk, data->pkpv, data->publicseed);
 
-  // Signal completion to core0
+  uint64_t t1 = time_us_64();
+  kg_prof.core1_pack += (t1 - t0);
+
   multicore_fifo_push_blocking(1);
 }
+
 
 /*************************************************
  * Name:        indcpa_keypair_derand
@@ -360,7 +374,8 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   multicore_fifo_pop_blocking();
 
   t1 = time_us_64();
-  kg_prof.hash_gena += (t1 - t0);
+  kg_prof.phase_hash_gena += (t1 - t0);
+
 
   multicore_reset_core1();
 
@@ -394,7 +409,7 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   // Wait for core1 to finish before proceeding
   multicore_fifo_pop_blocking();
   t1 = time_us_64();
-  kg_prof.matmul += (t1 - t0);
+  kg_prof.phase_matmul += (t1 - t0);
   multicore_reset_core1();
 
   // Securely zeroise 'a' after use
@@ -430,7 +445,8 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
   // Wait for core1
   multicore_fifo_pop_blocking();
   t1 = time_us_64();
-  kg_prof.pack += (t1 - t0);
+  kg_prof.phase_pack += (t1 - t0);
+
   multicore_reset_core1();
 
   // Finally, zeroise the secret key
@@ -444,25 +460,37 @@ void indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLICKEYBYTES],
 
 void core1_mul_worker_enc()
 {
-  core1_mul_data_enc_t *data = (core1_mul_data_enc_t *)multicore_fifo_pop_blocking();
-  unsigned int start = data->start;
-  unsigned int end = data->end;
+  core1_mul_data_enc_t *data =
+      (core1_mul_data_enc_t *)multicore_fifo_pop_blocking();
 
-  for (unsigned int i = start; i < end; i++)
-  {
-    polyvec_basemul_acc_montgomery(&data->b->vec[i], &data->at[i], data->sp);
-  }
+  uint64_t t0 = time_us_64();
 
-  // Signal completion
+  for (unsigned int i = data->start; i < data->end; i++)
+    polyvec_basemul_acc_montgomery(&data->b->vec[i],
+                                   &data->at[i],
+                                   data->sp);
+
+  uint64_t t1 = time_us_64();
+  enc_prof.core1_matmul += (t1 - t0);
+
   multicore_fifo_push_blocking(1);
 }
 
+
 void core1_frommsg_worker()
 {
-  core1_frommsg_data_t *data = (core1_frommsg_data_t *)multicore_fifo_pop_blocking();
+  core1_frommsg_data_t *data =
+      (core1_frommsg_data_t *)multicore_fifo_pop_blocking();
+
+  uint64_t t0 = time_us_64();
   poly_frommsg(data->k, data->m);
-  multicore_fifo_push_blocking(1); // signal completion
+  uint64_t t1 = time_us_64();
+
+  enc_prof.core1_frommsg += (t1 - t0);
+
+  multicore_fifo_push_blocking(1);
 }
+
 
 /*************************************************
  * Name:        indcpa_enc
@@ -510,7 +538,7 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   // Wait for core1
   multicore_fifo_pop_blocking();
   t1 = time_us_64();
-  enc_prof.frommsg += (t1 - t0);
+  enc_prof.phase_frommsg += (t1 - t0);
 
   multicore_reset_core1();
 
@@ -564,7 +592,8 @@ void indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
   // Wait for core1 and cleanup
   multicore_fifo_pop_blocking();
   t1 = time_us_64();
-  enc_prof.matmul += (t1 - t0);
+  enc_prof.phase_matmul += (t1 - t0);
+
 
   multicore_reset_core1();
 
